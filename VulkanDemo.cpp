@@ -97,21 +97,26 @@ struct Aligned
 };
 
 
-#pragma pack(push, 256)
 struct UniformBufferObject:Aligned<UniformBufferObject>
 {
+public:
+	static uint32_t align;
+
 	glm::mat4 model;
 	glm::mat4 view;
 	glm::mat4 proj;
 
 	static uint32_t Align()
 	{
-		return 256;
+		return align;
+	}
+
+	static void Align(uint32_t align)
+	{
+		UniformBufferObject::align = align;
 	}
 };
-#pragma pack(pop)
-
-
+uint32_t UniformBufferObject::align = 0;
 
 
 class HelloTriangleApplication
@@ -456,11 +461,7 @@ private:
 			hardwSuitable &= swapChainAdequate;
 		}
 
-
-
-
-
-
+		UniformBufferObject::Align(deviceProperties.limits.minUniformBufferOffsetAlignment);
 
 		return hardwSuitable;
 	}
