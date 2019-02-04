@@ -90,6 +90,13 @@ struct Vertex
 template<typename T>
 struct Aligned
 {
+	static uint32_t align;
+
+	static uint32_t Align()
+	{
+		return align;
+	}
+
 	static uint32_t AlignedSize()
 	{
 		return sizeof(T) + (T::Align() - (sizeof(T) % T::Align()));
@@ -100,16 +107,10 @@ struct Aligned
 struct UniformBufferObject:Aligned<UniformBufferObject>
 {
 public:
-	static uint32_t align;
 
 	glm::mat4 model;
 	glm::mat4 view;
 	glm::mat4 proj;
-
-	static uint32_t Align()
-	{
-		return align;
-	}
 
 	static void Align(uint32_t align)
 	{
