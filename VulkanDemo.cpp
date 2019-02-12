@@ -10,7 +10,7 @@
 #include <fstream>
 #include <chrono>
 #include <filesystem>
-
+#include <unordered_map>
 
 
 #include <vulkan/vulkan.h>
@@ -23,11 +23,16 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/hash.hpp>
+
+
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
 
-
+#define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
 
@@ -58,6 +63,11 @@ struct Vertex
 	glm::vec3 pos;
 	glm::vec3 color;
 	glm::vec2 texCoord;
+
+	bool operator==(const Vertex& other) const
+	{
+		return pos == other.pos && color == other.color && texCoord == other.texCoord;
+	}
 
 	static VkVertexInputBindingDescription getBindingDescription()
 	{
@@ -91,6 +101,20 @@ struct Vertex
 		return attributeDescriptions;
 	}
 };
+
+
+namespace std
+{
+	template<> struct hash<Vertex>
+	{
+		size_t operator()(Vertex const& vertex) const
+		{
+			return ((hash<glm::vec3>()(vertex.pos) ^ (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^ (hash<glm::vec2>()(vertex.texCoord) << 1);
+		}
+	};
+}
+
+
 
 
 template<typename T>
@@ -139,6 +163,14 @@ public:
 private:
 	const int WIDTH = 800;
 	const int HEIGHT = 600;
+
+	const std::string MODEL_PATH = "textures/chalet.obj";
+	const std::string TEXTURE_PATH = "textures/chalet.jpg";
+
+
+
+
+
 
 	const std::vector<const char*> validationLayers =
 	{
@@ -216,25 +248,8 @@ private:
 
 
 
-	const std::vector<Vertex> vertices =
-	{
-		{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-		{{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-		{{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-		{{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-
-		{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-		{{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-		{{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-		{{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
-	};
-
-	const std::vector<uint16_t> indices =
-	{
-		0, 1, 2, 2, 3, 0,
-		4, 5, 6, 6, 7, 4
-	};
-
+	std::vector<Vertex> vertices;
+	std::vector<uint32_t> indices;
 
 
 
@@ -1190,7 +1205,10 @@ private:
 	void createTextureImage()
 	{
 		int texWidth, texHeight, texChannels;
-		stbi_uc* pixels = stbi_load("textures\\texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		
+		//stbi_uc* pixels = stbi_load("textures\\texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+
 		VkDeviceSize imageSize = texWidth * texHeight * 4;
 
 		if (!pixels)
@@ -1699,7 +1717,7 @@ private:
 
 
 
-			vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+			vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 
 
@@ -1848,12 +1866,6 @@ private:
 
 
 
-
-
-
-
-
-
 	void initVulkan()
 	{
 		createInstance();
@@ -1882,6 +1894,15 @@ private:
 		createTextureImage();      //Texture
 		createTextureImageView();  //Texture
 		createTextureSampler();    //Texture
+
+
+
+
+
+		loadModel();
+
+
+
 
 		createVertexBuffer();
 		createIndexBuffer();
@@ -1930,6 +1951,11 @@ private:
 
 	void cleanupSwapChain()
 	{
+
+		vkDestroyImageView(device, depthImageView, nullptr);
+		vkDestroyImage(device, depthImage, nullptr);
+		vkFreeMemory(device, depthImageMemory, nullptr);
+
 		for (auto framebuffer : swapChainFramebuffers)
 			vkDestroyFramebuffer(device, framebuffer, nullptr);
 
@@ -2000,10 +2026,6 @@ private:
 		glfwTerminate();
 	}
 
-
-
-
-
 	void mainLoop()
 	{
 		while (!glfwWindowShouldClose(window))
@@ -2012,6 +2034,61 @@ private:
 			drawFrame();
 		}
 	}
+
+
+
+
+
+	void loadModel()
+	{
+		tinyobj::attrib_t attrib;
+		std::vector<tinyobj::shape_t> shapes;
+		std::vector<tinyobj::material_t> materials;
+		std::string warn, err;
+
+		if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str()))
+			throw std::runtime_error(warn + err);
+
+
+
+		std::unordered_map<Vertex, uint32_t> uniqueVertices = {};
+
+
+
+
+
+
+
+		for (const auto& shape : shapes)
+			for (const auto& index : shape.mesh.indices)
+			{
+				Vertex vertex = {};
+
+				vertex.pos =
+				{
+					attrib.vertices[3 * index.vertex_index + 0],
+					attrib.vertices[3 * index.vertex_index + 1],
+					attrib.vertices[3 * index.vertex_index + 2]
+				};
+
+				vertex.texCoord =
+				{
+					attrib.texcoords[2 * index.texcoord_index + 0],
+					1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
+				};
+
+				vertex.color = { 1.0f, 1.0f, 1.0f };
+
+				if (uniqueVertices.count(vertex) == 0)
+				{
+					uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
+					vertices.push_back(vertex);
+				}
+
+				indices.push_back(uniqueVertices[vertex]);
+			}
+	}
+
 };
 
 
