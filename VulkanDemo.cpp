@@ -28,6 +28,11 @@
 
 
 
+#include "tiny_obj_loader.h"
+
+
+
+
 struct QueueFamilyIndices
 {
 	std::optional<uint32_t> graphicsFamily;
@@ -761,11 +766,6 @@ private:
 		colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
-		VkAttachmentReference colorAttachmentRef = {};
-		colorAttachmentRef.attachment = 0;
-		colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-
 		VkAttachmentDescription depthAttachment = {};
 		depthAttachment.format = VK_FORMAT_D32_SFLOAT_S8_UINT;
 		depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -777,25 +777,6 @@ private:
 		depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 
-		VkAttachmentReference depthAttachmentRef = {};
-		depthAttachmentRef.attachment = 1;
-		depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-
-
-		VkSubpassDescription subpass = {};
-		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-		subpass.colorAttachmentCount = 1;
-		subpass.pColorAttachments = &colorAttachmentRef;
-		subpass.pDepthStencilAttachment = &depthAttachmentRef;
-
-
-
-
-
-
-
-
 		/*VkSubpassDependency dependency = {};
 		dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
 		dependency.dstSubpass = 0;
@@ -803,6 +784,20 @@ private:
 		dependency.srcAccessMask = 0;
 		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;*/
+
+		VkAttachmentReference colorAttachmentRef = {};
+		colorAttachmentRef.attachment = 0;
+		colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		VkAttachmentReference depthAttachmentRef = {};
+		depthAttachmentRef.attachment = 1;
+		depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+		VkSubpassDescription subpass = {};
+		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &colorAttachmentRef;
+		subpass.pDepthStencilAttachment = &depthAttachmentRef;
 
 
 		std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
@@ -1121,7 +1116,7 @@ private:
 			std::array<VkImageView, 2> attachments =
 			{
 				swapChainImageViews[i],
-				depthImageView
+				depthImageView,
 			};
 
 
@@ -1920,8 +1915,11 @@ private:
 
 		createSwapChain();
 		createImageViews();
+		
 		createRenderPass();
 		createGraphicsPipeline();
+		createDepthResources();
+
 		createFramebuffers();
 		createCommandBuffers();
 	}
@@ -2024,7 +2022,6 @@ private:
 
 int main()
 {
-
 	HelloTriangleApplication app;
 
 	try
