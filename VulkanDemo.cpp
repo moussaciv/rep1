@@ -792,13 +792,13 @@ private:
 		depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 
-		/*VkSubpassDependency dependency = {};
+		VkSubpassDependency dependency = {};
 		dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
 		dependency.dstSubpass = 0;
 		dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 		dependency.srcAccessMask = 0;
 		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;*/
+		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
 		VkAttachmentReference colorAttachmentRef = {};
 		colorAttachmentRef.attachment = 0;
@@ -1001,7 +1001,7 @@ private:
 		colorBlending.blendConstants[3] = 0.0f; // Optional
 
 
-		
+
 		VkPipelineDepthStencilStateCreateInfo depthStencil = {};
 		depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 		depthStencil.depthTestEnable = VK_TRUE;
@@ -1205,7 +1205,7 @@ private:
 	void createTextureImage()
 	{
 		int texWidth, texHeight, texChannels;
-		
+
 		//stbi_uc* pixels = stbi_load("textures\\texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 		stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 
@@ -1702,7 +1702,7 @@ private:
 			std::array<VkClearValue, 2> clearValues = {};
 			clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
 			clearValues[1].depthStencil = { 1.0f, 0 };
-			renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size()); ;
+			renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
 			renderPassInfo.pClearValues = clearValues.data();
 
 
@@ -1796,20 +1796,19 @@ private:
 	void drawFrame()
 	{
 		vkWaitForFences(device, 1, &inFlightFences[frameIndex], VK_TRUE, std::numeric_limits<uint64_t>::max());
-		vkResetFences(device, 1, &inFlightFences[frameIndex]);
+		
 
 		uint32_t imageIndex;
 		VkResult acqImageRes = vkAcquireNextImageKHR(device, swapChain, std::numeric_limits<uint64_t>::max(), imageAvailableSemaphores[frameIndex], VK_NULL_HANDLE, &imageIndex);
 
-		if (acqImageRes == VK_ERROR_OUT_OF_DATE_KHR || acqImageRes == VK_SUBOPTIMAL_KHR || framebufferResized)
+
+		if (acqImageRes == VK_ERROR_OUT_OF_DATE_KHR)
 		{
-			framebufferResized = false;
 			recreateSwapChain();
+			return;
 		}
-		else if (acqImageRes != VK_SUCCESS)
-		{
+		else if (acqImageRes != VK_SUCCESS && acqImageRes != VK_SUBOPTIMAL_KHR)
 			throw std::runtime_error("failed to acquire swap chain image!");
-		}
 
 
 
@@ -1833,7 +1832,7 @@ private:
 		submitInfo.signalSemaphoreCount = 1;
 		submitInfo.pSignalSemaphores = renderFinishedSemaphores1;
 
-
+		vkResetFences(device, 1, &inFlightFences[frameIndex]);
 		if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[frameIndex]) != VK_SUCCESS)
 			throw std::runtime_error("failed to submit draw command buffer!");
 
@@ -1852,7 +1851,16 @@ private:
 		presentInfo.pImageIndices = &imageIndex;
 		presentInfo.pResults = nullptr; // Optional
 
-		vkQueuePresentKHR(presentQueue, &presentInfo);
+		VkResult presentImg = vkQueuePresentKHR(presentQueue, &presentInfo);
+
+		if (presentImg == VK_ERROR_OUT_OF_DATE_KHR || presentImg == VK_SUBOPTIMAL_KHR || framebufferResized)
+		{
+			framebufferResized = false;
+			recreateSwapChain();
+		}
+		else if (presentImg != VK_SUCCESS)
+			throw std::runtime_error("failed to present swap chain image!");
+
 
 		frameIndex = (frameIndex + 1) % swapChainFramebuffers.size();
 	}
@@ -1936,7 +1944,7 @@ private:
 
 		createSwapChain();
 		createImageViews();
-		
+
 		createRenderPass();
 		createGraphicsPipeline();
 		createDepthResources();
@@ -1951,13 +1959,12 @@ private:
 
 	void cleanupSwapChain()
 	{
+		for (auto framebuffer : swapChainFramebuffers)
+			vkDestroyFramebuffer(device, framebuffer, nullptr);
 
 		vkDestroyImageView(device, depthImageView, nullptr);
 		vkDestroyImage(device, depthImage, nullptr);
 		vkFreeMemory(device, depthImageMemory, nullptr);
-
-		for (auto framebuffer : swapChainFramebuffers)
-			vkDestroyFramebuffer(device, framebuffer, nullptr);
 
 		vkFreeCommandBuffers(device, commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
 
@@ -1969,6 +1976,7 @@ private:
 			vkDestroyImageView(device, imageView, nullptr);
 
 		vkDestroySwapchainKHR(device, swapChain, nullptr);
+
 	}
 
 
@@ -1981,6 +1989,7 @@ private:
 		vkDestroyImageView(device, textureImageView, nullptr);
 
 		vkDestroyImage(device, textureImage, nullptr);
+
 		vkFreeMemory(device, textureImageMemory, nullptr);
 
 
@@ -2033,6 +2042,9 @@ private:
 			glfwPollEvents();
 			drawFrame();
 		}
+
+
+		vkDeviceWaitIdle(device);
 	}
 
 
@@ -2052,12 +2064,6 @@ private:
 
 
 		std::unordered_map<Vertex, uint32_t> uniqueVertices = {};
-
-
-
-
-
-
 
 		for (const auto& shape : shapes)
 			for (const auto& index : shape.mesh.indices)
@@ -2087,8 +2093,26 @@ private:
 
 				indices.push_back(uniqueVertices[vertex]);
 			}
-	}
 
+		/*vertices =
+		{
+			{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+			{{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+			{{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+			{{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+
+			{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+			{{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+			{{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+			{{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
+		};
+
+		indices =
+		{
+			0, 1, 2, 2, 3, 0,
+			4, 5, 6, 6, 7, 4
+		};*/
+	}
 };
 
 
